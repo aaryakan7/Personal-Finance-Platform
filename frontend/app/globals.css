@@ -322,6 +322,33 @@ td.amount {
   font-weight: 600;
 }
 
+.budget-amount.near {
+  color: #9a6700;
+  font-weight: 600;
+}
+
+.budget-status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.budget-status.on-track {
+  color: #1a7f37;
+  background: #dafbe1;
+}
+
+.budget-status.near {
+  color: #7d4e00;
+  background: #fff8c5;
+}
+
+.budget-status.over {
+  color: #a40e26;
+  background: #ffebe9;
+}
+
 .budget-bar-track {
   height: 8px;
   border-radius: 999px;
@@ -338,4 +365,8 @@ td.amount {
 
 .budget-bar-fill.over {
   background: #c0362c;
+}
+
+.budget-bar-fill.near {
+  background: #bf8700;
 }

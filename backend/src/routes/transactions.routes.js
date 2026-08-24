@@ -4,6 +4,7 @@ const { body, param, query } = require("express-validator");
 const { list, create, update, remove } = require("../controllers/transactions.controller");
 const { handleValidation } = require("../middleware/validate");
 const { requireAuth } = require("../middleware/requireAuth");
+const { cacheResponse } = require("../middleware/cache");
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.get(
     query("categoryId").optional().isInt(),
   ],
   handleValidation,
+  cacheResponse(),
   list
 );
 

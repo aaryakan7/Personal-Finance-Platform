@@ -17,11 +17,10 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // Neon (and most hosted Postgres providers) require SSL. `rejectUnauthorized: false`
-  // skips verifying Neon's certificate chain, which is the standard trade-off for
-  // hosted free-tier Postgres where you don't manage the certificate yourself.
+  // Hosted Postgres providers require TLS. Certificate verification stays enabled
+  // by default in production; the opt-out exists only for a local/self-signed DB.
   ssl: {
-    rejectUnauthorized: false,
+    rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
   },
 });
 

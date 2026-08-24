@@ -4,6 +4,7 @@ const { body, param } = require("express-validator");
 const { list, create, update, remove } = require("../controllers/categories.controller");
 const { handleValidation } = require("../middleware/validate");
 const { requireAuth } = require("../middleware/requireAuth");
+const { cacheResponse } = require("../middleware/cache");
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ const router = express.Router();
 // on each individual route.
 router.use(requireAuth);
 
-router.get("/", list);
+router.get("/", cacheResponse(), list);
 
 router.post(
   "/",

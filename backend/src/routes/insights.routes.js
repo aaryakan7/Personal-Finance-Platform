@@ -9,6 +9,7 @@ const {
 } = require("../controllers/insights.controller");
 const { handleValidation } = require("../middleware/validate");
 const { requireAuth } = require("../middleware/requireAuth");
+const { cacheResponse } = require("../middleware/cache");
 
 const router = express.Router();
 
@@ -20,15 +21,17 @@ router.get(
   "/summary",
   [query("month").optional().matches(MONTH_FORMAT).withMessage("month must be in YYYY-MM format")],
   handleValidation,
+  cacheResponse(900),
   spendingSummary
 );
 
-router.get("/budget-recommendations", budgetRecommendations);
+router.get("/budget-recommendations", cacheResponse(900), budgetRecommendations);
 
 router.get(
   "/anomalies",
   [query("month").optional().matches(MONTH_FORMAT).withMessage("month must be in YYYY-MM format")],
   handleValidation,
+  cacheResponse(300),
   anomalies
 );
 

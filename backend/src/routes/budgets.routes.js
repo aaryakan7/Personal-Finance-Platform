@@ -4,6 +4,7 @@ const { body, param, query } = require("express-validator");
 const { list, create, update, remove } = require("../controllers/budgets.controller");
 const { handleValidation } = require("../middleware/validate");
 const { requireAuth } = require("../middleware/requireAuth");
+const { cacheResponse } = require("../middleware/cache");
 
 const router = express.Router();
 
@@ -15,6 +16,7 @@ router.get(
   "/",
   [query("month").optional().matches(MONTH_FORMAT).withMessage("month must be in YYYY-MM format")],
   handleValidation,
+  cacheResponse(),
   list
 );
 

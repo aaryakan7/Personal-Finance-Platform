@@ -4,6 +4,7 @@ const { body } = require("express-validator");
 const { signup, login, me } = require("../controllers/auth.controller");
 const { handleValidation } = require("../middleware/validate");
 const { requireAuth } = require("../middleware/requireAuth");
+const { createLoginRateLimit } = require("../middleware/loginRateLimit");
 
 const router = express.Router();
 
@@ -23,6 +24,7 @@ router.post(
 
 router.post(
   "/login",
+  createLoginRateLimit(),
   [
     body("email").isEmail().withMessage("Must be a valid email").normalizeEmail(),
     body("password").notEmpty().withMessage("Password is required"),

@@ -1,3 +1,6 @@
 node_modules/
 .env
 *.log
+
+# Obsolete Node test-runner copy; Jest suites live in backend/__tests__.
+test/middleware.test.js

@@ -376,13 +376,18 @@ export default function DashboardPage() {
             {budgets.map((b) => {
               const limit = Number(b.amount);
               const spent = Number(b.spent);
-              const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0;
+              const rawPct = limit > 0 ? (spent / limit) * 100 : 0;
+              const pct = Math.min(rawPct, 100);
               const over = spent > limit;
+              const near = !over && rawPct >= 80;
+              const status = over ? "Over budget" : near ? "Near budget" : "On track";
+              const statusClass = over ? "over" : near ? "near" : "on-track";
               return (
                 <li key={b.id} className="budget-row">
                   <div className="budget-row-top">
                     <span>{b.category_name}</span>
-                    <span className={over ? "budget-amount over" : "budget-amount"}>
+                    <span className={`budget-status ${statusClass}`}>{status}</span>
+                    <span className={`budget-amount ${statusClass}`}>
                       ${spent.toFixed(2)} / ${limit.toFixed(2)}
                     </span>
                     <button type="button" className="icon-button" onClick={() => handleDeleteBudget(b.id)}>
@@ -391,8 +396,13 @@ export default function DashboardPage() {
                   </div>
                   <div className="budget-bar-track">
                     <div
-                      className={over ? "budget-bar-fill over" : "budget-bar-fill"}
+                      className={`budget-bar-fill ${statusClass}`}
                       style={{ width: `${pct}%` }}
+                      role="progressbar"
+                      aria-label={`${b.category_name} budget used`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(pct)}
                     />
                   </div>
                 </li>

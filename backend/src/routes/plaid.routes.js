@@ -10,6 +10,7 @@ const {
 } = require("../controllers/plaid.controller");
 const { handleValidation } = require("../middleware/validate");
 const { requireAuth } = require("../middleware/requireAuth");
+const { cacheResponse } = require("../middleware/cache");
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ router.post(
 
 router.post("/sync", sync);
 
-router.get("/items", listItems);
+router.get("/items", cacheResponse(), listItems);
 
 router.delete("/items/:id", [param("id").isInt().withMessage("Invalid item id")], handleValidation, removeItem);
 
