@@ -1,10 +1,5 @@
 const { pool } = require("../config/db");
 
-// If a category_id was given, make sure it's actually one of this user's own
-// categories before letting a transaction attach to it. Without this check,
-// user A could pass user B's category_id and the foreign key would happily
-// accept it — nothing about a plain foreign key knows or cares which user
-// owns which row, so that has to be enforced here in application code.
 async function assertCategoryOwnership(categoryId, userId) {
   if (categoryId === undefined || categoryId === null) return true;
   const result = await pool.query("SELECT id FROM categories WHERE id = $1 AND user_id = $2", [
@@ -16,7 +11,6 @@ async function assertCategoryOwnership(categoryId, userId) {
 
 async function list(req, res, next) {
   try {
-    // Optional query-string filters, e.g. GET /api/transactions?type=expense
     const { type, categoryId } = req.query;
 
     const conditions = ["user_id = $1"];
@@ -69,12 +63,8 @@ async function create(req, res, next) {
 async function update(req, res, next) {
   try {
     const { amount, type, description, transactionDate, categoryId } = req.body;
-    // Note: this COALESCE-based "only overwrite what was sent" approach can't
-    // distinguish "don't change this field" from "explicitly clear it back to
-    // null" — sending categoryId: null here won't uncategorize a transaction,
-    // it'll just leave the existing category alone. Fine for Phase 2; if
-    // "uncategorize" becomes a real feature, that one field needs its own
-    // explicit-null handling instead of relying on COALESCE.
+
+    // COALESCE treats an explicit null category as no change.
 
     if (categoryId !== undefined && !(await assertCategoryOwnership(categoryId, req.userId))) {
       return res.status(400).json({ error: "That category doesn't exist on your account" });

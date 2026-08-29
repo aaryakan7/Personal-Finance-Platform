@@ -41,19 +41,7 @@ label {
   margin-bottom: 8px;
 }
 
-/* Explicit background + text color, not just border: without these, a system
-   in dark mode renders native inputs/selects with the browser's own dark
-   theme (because of `color-scheme: light dark` above) instead of matching
-   the rest of this light-themed page — which is what made these look like
-   solid black boxes, and made the dashboard's <select> text unreadable.
-
-   color-scheme: light here (overriding the page-wide `light dark`, just for
-   form controls) fixes the same problem for the pieces background/color
-   can't touch directly — a native <input type="date">'s calendar-icon button,
-   and a <select>'s dropdown arrow, are drawn by the browser itself using
-   whichever color scheme it thinks is active. Left at "light dark", the icon
-   was being drawn in its dark-theme color (near-white) on our white input,
-   making it effectively invisible. */
+/* Force native controls to match the application's light form styling. */
 input,
 select {
   color-scheme: light;
@@ -119,8 +107,6 @@ nav button.link {
   font-weight: 600;
 }
 
-/* --- Dashboard (wider than the narrow auth-form layout above) --- */
-
 main.dashboard {
   max-width: 960px;
 }
@@ -154,18 +140,11 @@ main.dashboard {
   flex-direction: column;
 }
 
-/* The transaction form is row + wrap (fields side by side), so its inputs
-   should grow to fill the row. The category form is column ("stacked"), where
-   the same flex-grow rule applied to height instead of width and was what
-   made the dropdown render with a broken, oversized box. */
 .panel form input {
   flex: 1;
   min-width: 100px;
 }
 
-/* Selects get a wider floor than plain inputs — a category name like
-   "Transportation" needs more room than a min-width tuned for a date or
-   amount field, or the closed box clips its own selected option's text. */
 .panel form select {
   flex: 1;
   min-width: 160px;
@@ -267,8 +246,6 @@ td.amount {
   padding: 12px 0;
 }
 
-/* --- Budgets panel --- */
-
 .budgets-panel {
   margin-top: 32px;
 }
@@ -293,10 +270,7 @@ td.amount {
   gap: 16px;
 }
 
-/* Specificity note: plain `.budget-row` (0,1,0) loses to `.row-list li`
-   (0,1,1) above, which would silently keep the row flex-horizontal. Scoping
-   through the parent list (`.budget-list .budget-row`, specificity 0,2,0)
-   wins instead. */
+/* Outrank the horizontal layout declared by .row-list li. */
 .budget-list .budget-row {
   flex-direction: column;
   align-items: stretch;

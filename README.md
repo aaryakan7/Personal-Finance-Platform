@@ -1,7 +1,7 @@
 # walletapp
 
-A personal finance / expense tracker, built as a portfolio project to demonstrate
-full-stack, security, and AI-integration skills.
+A full-stack personal finance application for tracking spending, managing budgets,
+linking sandbox bank accounts, and reviewing spending insights.
 
 ## Features
 
@@ -15,8 +15,7 @@ full-stack, security, and AI-integration skills.
 
 ## Structure
 
-This is a monorepo with two independent apps — they don't share code or a
-runtime, and each has its own `package.json`, dependencies, and dev server.
+This monorepo contains two independently deployed applications:
 
 ```
 walletapp/
@@ -24,12 +23,8 @@ walletapp/
   frontend/    Next.js web app (talks to the backend over HTTP)
 ```
 
-**Why two separate apps instead of one Next.js app with API routes?** Next.js can
-do both frontend and backend in one project, but keeping a standalone Express API
-demonstrates the ability to design and run a REST API independently of any
-particular frontend framework — the kind of API another team's mobile app or a
-third-party integration could also call. That's a common real-world setup and a
-better resume signal than a framework's built-in API routes.
+The frontend communicates with the backend exclusively through its REST API. This
+keeps persistence, authentication, and integrations independent of the UI.
 
 ## Architecture
 
@@ -97,7 +92,6 @@ production build on every push and pull request.
 
 ## Production
 
-Phase 7 adds optional Redis caching and Redis-backed login throttling. Phase 8
-adds production Docker images, health/readiness checks, graceful shutdown, and a
-deployment checklist. See `DEPLOYMENT.md` for required environment variables and
-the release sequence.
+The repository includes production Docker images, Redis-backed caching and rate
+limiting, health checks, graceful shutdown, and a deployment checklist. See
+`DEPLOYMENT.md` for environment variables and release steps.

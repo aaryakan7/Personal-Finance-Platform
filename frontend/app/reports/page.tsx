@@ -28,17 +28,10 @@ function currentMonthValue() {
   return new Date().toISOString().slice(0, 7);
 }
 
-// A fixed palette so pie slices are stable/distinct across renders, instead
-// of Recharts picking arbitrary colors. Enough entries that categories only
-// start repeating colors well past what fits comfortably in a legend anyway.
 const PALETTE = ["#2f6feb", "#c0362c", "#1a7f37", "#b6862c", "#7a4fd6", "#0f9aa8", "#d6558a", "#5c6773"];
 
 const currency = (n: number) => `$${n.toFixed(2)}`;
 
-// Recharts' Tooltip formatter prop is typed against its own internal
-// ValueType (which can be undefined, a string, or an array), not a plain
-// number — so this coerces whatever it hands back before formatting, rather
-// than fighting that type in every <Tooltip> below.
 function tooltipCurrency(value: unknown): string {
   return currency(Number(value ?? 0));
 }
@@ -83,9 +76,6 @@ export default function ReportsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
-  // Recharts wants plain numbers, but the API returns NUMERIC as strings (see
-  // the Transaction/Budget type comments in lib/api.ts) — convert once here
-  // rather than scattering Number(...) through the JSX below.
   const pieData = categorySpending.map((c) => ({ name: c.category_name, value: Number(c.total) }));
 
   const trendData = trend.map((t) => ({

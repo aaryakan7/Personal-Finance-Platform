@@ -2,10 +2,6 @@ const { getPlaidClient } = require("../config/plaid");
 const { pool } = require("../config/db");
 const { encrypt, decrypt } = require("../utils/crypto");
 
-// Step 1 of Plaid Link: the frontend needs a short-lived "link token" before
-// it can even open the Plaid Link popup. This is Plaid's way of tying that
-// popup session back to a specific one of our users and our app's
-// credentials, without the frontend ever touching PLAID_SECRET directly.
 async function createLinkToken(req, res, next) {
   try {
     const plaidClient = getPlaidClient();
@@ -23,11 +19,6 @@ async function createLinkToken(req, res, next) {
   }
 }
 
-// Step 2: after the user finishes the Plaid Link popup (picks a sandbox bank,
-// enters test credentials), the frontend gets back a short-lived
-// `public_token` and sends it here. This exchanges it for the real,
-// long-lived `access_token` — the only thing that can actually fetch this
-// connection's account/transaction data going forward.
 async function exchangePublicToken(req, res, next) {
   try {
     const plaidClient = getPlaidClient();
@@ -37,9 +28,6 @@ async function exchangePublicToken(req, res, next) {
     const accessToken = exchange.data.access_token;
     const itemId = exchange.data.item_id;
 
-    // Institution name is just for display ("Chase Sandbox Bank" instead of a
-    // raw item id) — fetched separately and best-effort, since a failure here
-    // shouldn't block the actual bank connection from being saved.
     let institutionName = null;
     try {
       const item = await plaidClient.itemGet({ access_token: accessToken });
@@ -51,16 +39,10 @@ async function exchangePublicToken(req, res, next) {
         });
         institutionName = institution.data.institution.name;
       }
-    } catch {
-      // Non-critical — proceed without a display name rather than failing
-      // the whole connection over it.
-    }
+    } catch {}
 
     const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
 
-    // Saving the item and all of its accounts together should be
-    // all-or-nothing, same reasoning as the user+categories transaction in
-    // auth.controller.js's signup.
     const client = await pool.connect();
     let plaidItemId;
     try {
@@ -96,14 +78,11 @@ async function exchangePublicToken(req, res, next) {
   }
 }
 
-// Converts one Plaid transaction into the shape our `transactions` table
-// expects. Plaid's amount convention is the opposite of a sign-free
-// intuition: positive = money leaving the account (an expense), negative =
-// money coming in (income) — refunds, deposits, direct payroll deposits, etc.
 function mapPlaidAmount(plaidAmount) {
+  // Plaid uses positive amounts for outflows and negative amounts for inflows.
   if (plaidAmount > 0) return { type: "expense", amount: plaidAmount };
   if (plaidAmount < 0) return { type: "income", amount: Math.abs(plaidAmount) };
-  return null; // a $0 transaction (e.g. a canceled auth hold) isn't worth storing — our amount CHECK requires > 0 anyway
+  return null;
 }
 
 async function syncOneItem(item) {
@@ -121,8 +100,6 @@ async function syncOneItem(item) {
   const modified = [];
   const removed = [];
 
-  // /transactions/sync is paginated (`has_more`) — a connection with a lot of
-  // history can require several calls to fully catch up.
   while (hasMore) {
     const response = await plaidClient.transactionsSync({ access_token: accessToken, cursor });
     added.push(...response.data.added);
@@ -138,7 +115,7 @@ async function syncOneItem(item) {
     await client.query("BEGIN");
 
     for (const tx of [...added, ...modified]) {
-      if (tx.pending) continue; // the posted version will arrive in a later sync once it clears
+      if (tx.pending) continue;
       const mapped = mapPlaidAmount(tx.amount);
       if (!mapped) continue;
 
@@ -244,19 +221,10 @@ async function removeItem(req, res, next) {
       return res.status(404).json({ error: "Linked account not found" });
     }
 
-    // Tell Plaid itself to tear down the connection, not just our own copy of
-    // it — otherwise it stays "connected" from Plaid's side indefinitely.
     try {
       await getPlaidClient().itemRemove({ access_token: decrypt(result.rows[0].access_token_encrypted) });
-    } catch {
-      // Proceed with local cleanup even if Plaid's side fails (e.g. it was
-      // already removed) — the user's intent is clear either way.
-    }
+    } catch {}
 
-    // ON DELETE CASCADE removes plaid_accounts; transactions imported from
-    // this connection keep their spending history, just with
-    // plaid_account_id set back to NULL (ON DELETE SET NULL) instead of
-    // being deleted.
     await pool.query("DELETE FROM plaid_items WHERE id = $1 AND user_id = $2", [req.params.id, req.userId]);
 
     res.status(204).send();

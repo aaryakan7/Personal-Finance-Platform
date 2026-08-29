@@ -22,17 +22,13 @@ export default function InsightsPage() {
   const [month, setMonth] = useState(currentMonthValue);
   const [error, setError] = useState<string | null>(null);
 
-  // Summary — user-triggered, since each click is a real LLM call.
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
-  // Budget recommendations — also user-triggered.
   const [recommendations, setRecommendations] = useState<BudgetRecommendation[] | null>(null);
   const [recommendationsLoading, setRecommendationsLoading] = useState(false);
   const [addedCategoryIds, setAddedCategoryIds] = useState<number[]>([]);
 
-  // Anomalies — pure arithmetic on the backend, no AI cost, safe to load
-  // automatically whenever the month changes.
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [anomaliesLoading, setAnomaliesLoading] = useState(true);
   const [explanations, setExplanations] = useState<Record<number, string>>({});
@@ -114,7 +110,7 @@ export default function InsightsPage() {
       <div className="panel">
         <h2>Spending summary</h2>
         <p className="empty" style={{ marginTop: 0 }}>
-          A short AI-generated summary of this month's spending compared to last month.
+          A short Gemini summary of this month's spending compared with last month.
         </p>
         <button type="button" onClick={handleGenerateSummary} disabled={summaryLoading}>
           {summaryLoading ? "Generating…" : summary ? "Regenerate summary" : "Generate summary"}

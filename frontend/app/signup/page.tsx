@@ -20,20 +20,12 @@ export default function SignupPage() {
 
     try {
       const data = await signup({ email, password, fullName });
-      // localStorage is the simplest place to keep the JWT for now. A
-      // production app would more likely use an httpOnly cookie instead,
-      // since JS running on the page (including any injected via an XSS bug)
-      // can read localStorage but can't read an httpOnly cookie. That's a
-      // hardening step for later, not something blocking this phase.
       localStorage.setItem("walletapp_token", data.token);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
     }
-    // No `finally` resetting loading: on success we're navigating away, so
-    // leaving the button disabled/"Creating account..." until the new page
-    // takes over reads better than it flashing back before the redirect.
   }
 
   return (

@@ -3,14 +3,11 @@ const { getGeminiClient, MODEL } = require("../config/gemini");
 const { normalizeMonth, currentMonth } = require("../utils/month");
 
 function previousMonth(monthStart) {
-  const d = new Date(monthStart); // "YYYY-MM-01" parses as UTC midnight
+  const d = new Date(monthStart);
   d.setUTCMonth(d.getUTCMonth() - 1);
   return d.toISOString().slice(0, 10);
 }
 
-// Income/expense totals, plus an expense-by-category breakdown, for one
-// calendar month. Shared by the summary endpoint for "this month vs last
-// month" — kept as a small helper instead of writing the query twice.
 async function monthTotals(userId, monthStart) {
   const result = await pool.query(
     `SELECT t.type, COALESCE(c.name, 'Uncategorized') AS category_name, SUM(t.amount) AS total
@@ -36,9 +33,6 @@ async function monthTotals(userId, monthStart) {
   return totals;
 }
 
-// A natural-language "what happened this month" summary, generated from real
-// numbers pulled from the database — the model never invents figures, it
-// only narrates the JSON payload it's handed.
 async function spendingSummary(req, res, next) {
   try {
     const month = normalizeMonth(req.query.month || currentMonth());
@@ -64,8 +58,8 @@ async function spendingSummary(req, res, next) {
       budgets: Object.fromEntries(budgetsResult.rows.map((r) => [r.category_name, Number(r.amount)])),
     };
 
-    const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
+    const gemini = getGeminiClient();
+    const response = await gemini.models.generateContent({
       model: MODEL,
       contents: JSON.stringify(payload),
       config: {
@@ -85,9 +79,6 @@ async function spendingSummary(req, res, next) {
   }
 }
 
-// Suggests a monthly budget per category based on trailing spending history.
-// Pure LLM judgment on top of real averages — the averages themselves are
-// computed here in SQL/JS, not by the model.
 async function budgetRecommendations(req, res, next) {
   try {
     const result = await pool.query(
@@ -120,14 +111,11 @@ async function budgetRecommendations(req, res, next) {
       };
     });
 
-    const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
+    const gemini = getGeminiClient();
+    const response = await gemini.models.generateContent({
       model: MODEL,
       contents: JSON.stringify(payload),
       config: {
-        // Gemini's JSON mode: constrains the response to valid JSON matching
-        // this shape, instead of relying purely on prompt instructions (which
-        // models can still drift from under free-text generation).
         responseMimeType: "application/json",
         responseSchema: {
           type: "object",
@@ -169,19 +157,11 @@ async function budgetRecommendations(req, res, next) {
   }
 }
 
-// Statistically flags transactions that are unusually large for their
-// category — plain arithmetic, no AI involved. The LLM only gets invoked
-// later, per-transaction, if the user asks for an explanation of one.
 async function anomalies(req, res, next) {
   try {
     const month = normalizeMonth(req.query.month || currentMonth());
 
     const [baseline, monthTx] = await Promise.all([
-      // The "normal" range for each category, built only from history
-      // *before* the month being checked — so a category isn't judged
-      // against transactions that are themselves part of what's being
-      // evaluated. Categories with fewer than 5 prior transactions are
-      // excluded — not enough history to call anything "unusual" yet.
       pool.query(
         `SELECT category_id, AVG(amount) AS avg_amount, STDDEV_POP(amount) AS stddev_amount, COUNT(*) AS n
          FROM transactions
@@ -211,10 +191,7 @@ async function anomalies(req, res, next) {
       const stddev = Number(stats.stddev_amount);
       const amount = Number(tx.amount);
 
-      // Flag anything more than 2 standard deviations above the category's
-      // usual amount. When a category's history is very consistent (stddev
-      // near 0), fall back to "50% above average" so a $0.01 variance
-      // doesn't make everything look like an outlier.
+      // Stable categories use a percentage fallback when variance is near zero.
       const threshold = stddev > 0.01 ? avg + 2 * stddev : avg * 1.5;
       if (amount > threshold && amount > avg * 1.2) {
         const pctAboveAvg = Math.round(((amount - avg) / avg) * 100);
@@ -235,9 +212,6 @@ async function anomalies(req, res, next) {
   }
 }
 
-// On-demand, plain-language explanation for one flagged transaction —
-// the only insights endpoint that costs an LLM call per click, deliberately,
-// since it's triggered by explicit user interest rather than a page load.
 async function explainTransaction(req, res, next) {
   try {
     const txResult = await pool.query(
@@ -262,8 +236,8 @@ async function explainTransaction(req, res, next) {
       [req.userId, req.params.id]
     );
 
-    const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
+    const gemini = getGeminiClient();
+    const response = await gemini.models.generateContent({
       model: MODEL,
       contents: JSON.stringify({
         amount: tx.amount,

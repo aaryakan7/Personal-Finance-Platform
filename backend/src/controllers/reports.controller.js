@@ -1,9 +1,6 @@
 const { pool } = require("../config/db");
 const { normalizeMonth, currentMonth } = require("../utils/month");
 
-// One expense total per category for a given month, including an
-// "Uncategorized" bucket for expense transactions with no category_id — a
-// plain JOIN would silently drop those rows instead of surfacing them.
 async function spendingByCategory(req, res, next) {
   try {
     const month = normalizeMonth(req.query.month || currentMonth());
@@ -30,9 +27,6 @@ async function spendingByCategory(req, res, next) {
   }
 }
 
-// Income vs. expense totals for each of the last N months, including months
-// with zero transactions — a plain GROUP BY on transactions alone would just
-// skip a month with no activity instead of showing it as $0.
 async function monthlyTrend(req, res, next) {
   try {
     const months = Math.min(Math.max(parseInt(req.query.months, 10) || 6, 1), 24);

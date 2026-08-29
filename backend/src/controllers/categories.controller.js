@@ -1,11 +1,5 @@
 const { pool } = require("../config/db");
 
-// Every query in this file includes `AND user_id = $...`. That's not optional
-// decoration — it's what stops user A from reading, editing, or deleting user
-// B's categories just by guessing an id in the URL. There's no separate
-// "check ownership" step; ownership is baked directly into the query itself,
-// so it's impossible to forget.
-
 async function list(req, res, next) {
   try {
     const result = await pool.query(
@@ -31,10 +25,6 @@ async function create(req, res, next) {
 
     res.status(201).json({ category: result.rows[0] });
   } catch (err) {
-    // Postgres error code 23505 = unique_violation. This fires if the user
-    // already has a category with this exact name (the UNIQUE(user_id, name)
-    // constraint from the migration). Translate it into a friendly 409 instead
-    // of a raw 500.
     if (err.code === "23505") {
       return res.status(409).json({ error: "You already have a category with that name" });
     }
@@ -55,9 +45,6 @@ async function update(req, res, next) {
     );
 
     if (result.rows.length === 0) {
-      // Deliberately the same 404 whether the category doesn't exist at all,
-      // or exists but belongs to someone else — either way, this user
-      // shouldn't be able to tell the difference.
       return res.status(404).json({ error: "Category not found" });
     }
 
@@ -81,7 +68,6 @@ async function remove(req, res, next) {
       return res.status(404).json({ error: "Category not found" });
     }
 
-    // 204 No Content: the delete worked, there's nothing meaningful to send back.
     res.status(204).send();
   } catch (err) {
     next(err);

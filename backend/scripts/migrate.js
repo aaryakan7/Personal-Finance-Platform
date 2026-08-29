@@ -1,13 +1,3 @@
-// A deliberately small migration runner — no framework, just plain SQL files.
-//
-// Why hand-rolled instead of an ORM's migration tool? At this stage it's more
-// valuable to see exactly what SQL runs against your database than to have a tool
-// generate it for you. Each file in migrations/ is a plain .sql file, numbered so
-// they run in order (001_, 002_, ...). This script keeps a `schema_migrations`
-// table recording which files it has already run, so re-running `npm run migrate`
-// after adding a new migration only applies the new one(s) — already-applied
-// migrations are skipped.
-
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
@@ -15,6 +5,7 @@ const { pool } = require("../src/config/db");
 
 const MIGRATIONS_DIR = path.join(__dirname, "..", "migrations");
 
+// Applied filenames make repeated deploys idempotent.
 async function ensureMigrationsTable(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (

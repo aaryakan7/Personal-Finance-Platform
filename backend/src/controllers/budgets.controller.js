@@ -1,9 +1,6 @@
 const { pool } = require("../config/db");
 const { normalizeMonth, currentMonth } = require("../utils/month");
 
-// A budget only makes sense attached to one of this user's own *expense*
-// categories — checked here rather than trusted from the request body, same
-// reasoning as transactions.controller.js's ownership check.
 async function assertExpenseCategoryOwnership(categoryId, userId) {
   const result = await pool.query("SELECT id, type FROM categories WHERE id = $1 AND user_id = $2", [
     categoryId,
@@ -14,11 +11,7 @@ async function assertExpenseCategoryOwnership(categoryId, userId) {
   return "ok";
 }
 
-// The core query: one budget row, left-joined against the sum of that same
-// category's expense transactions falling inside that budget's month. LEFT
-// JOIN (not a plain JOIN) matters here — a brand-new budget with zero
-// transactions against it yet should still show up with spent = 0, not
-// disappear from the list entirely.
+// The left join retains budgets that have no matching transactions.
 const SELECT_WITH_SPEND = `
   SELECT
     b.id,
@@ -75,11 +68,6 @@ async function create(req, res, next) {
       [req.userId, categoryId, month, amount]
     );
 
-    // Re-select through the same spend-calculating query used by `list`, so a
-    // freshly created budget comes back in exactly the same shape (including
-    // spent: 0) as everything the dashboard already knows how to render —
-    // rather than maintaining a second, slightly different response shape
-    // just for this one endpoint.
     const result = await pool.query(
       `${SELECT_WITH_SPEND} WHERE b.id = $1 GROUP BY b.id, c.name`,
       [inserted.rows[0].id]

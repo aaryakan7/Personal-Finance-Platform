@@ -1,19 +1,11 @@
-// bcryptjs, not bcrypt: same API, but pure JavaScript instead of a native module,
-// so it doesn't need a C++ compiler toolchain to install — one less thing to fight
-// with, especially on Windows.
 const bcrypt = require("bcryptjs");
 const { pool } = require("../config/db");
 const { encrypt, decrypt } = require("../utils/crypto");
 const { signToken } = require("../utils/jwt");
 const { DEFAULT_CATEGORIES } = require("../utils/defaultCategories");
 
-const BCRYPT_ROUNDS = 12; // "cost factor" — each +1 roughly doubles the hashing time.
-// 12 is a common default in 2026: slow enough that brute-forcing leaked hashes is
-// expensive, fast enough that a real login doesn't feel slow (well under 1 second).
+const BCRYPT_ROUNDS = 12;
 
-// Only these fields ever get sent back to the frontend. Centralizing that here
-// means it's impossible to accidentally leak password_hash or the raw encrypted
-// phone number by forgetting to strip a field in some route.
 function toPublicUser(row) {
   return {
     id: row.id,
@@ -28,26 +20,13 @@ async function signup(req, res, next) {
 
     const existing = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
     if (existing.rows.length > 0) {
-      // 409 Conflict: the request is well-formed, but it collides with existing state.
       return res.status(409).json({ error: "An account with that email already exists" });
     }
 
-    // Never store the plaintext password — only its bcrypt hash. bcrypt generates
-    // and embeds a random "salt" into the hash automatically, so two users with the
-    // same password still get completely different hashes stored.
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-    // phoneNumber is optional. Only encrypt/store it if the user actually gave one.
     const phoneNumberEncrypted = phoneNumber ? encrypt(phoneNumber) : null;
 
-    // Creating the user and seeding their starter categories has to be
-    // all-or-nothing: if the category inserts failed after the user was already
-    // committed, you'd end up with a real account and no way to categorize
-    // anything. `pool.query` alone can't do that — it grabs a connection, runs
-    // one statement, and gives the connection back, so nothing ties multiple
-    // statements together. A transaction (BEGIN ... COMMIT/ROLLBACK) needs a
-    // single dedicated connection held for its whole duration, which is what
-    // `pool.connect()` checks out here.
     const client = await pool.connect();
     let user;
     try {
@@ -73,8 +52,6 @@ async function signup(req, res, next) {
       await client.query("ROLLBACK");
       throw err;
     } finally {
-      // Always give the connection back to the pool, whether we committed,
-      // rolled back, or something else threw along the way.
       client.release();
     }
 
@@ -95,10 +72,7 @@ async function login(req, res, next) {
       [email]
     );
 
-    // Deliberately vague error message on both "no such user" and "wrong password".
-    // If we said "no account with that email" vs "wrong password" separately, an
-    // attacker could use the API to discover which emails have accounts (an
-    // "enumeration" attack) even without ever guessing a correct password.
+    // Keep both failure cases identical to prevent account enumeration.
     const genericError = () => res.status(401).json({ error: "Invalid email or password" });
 
     if (result.rows.length === 0) {
@@ -122,8 +96,6 @@ async function login(req, res, next) {
 
 async function me(req, res, next) {
   try {
-    // req.userId was set by the requireAuth middleware after verifying the JWT.
-    // Reaching this handler at all proves the token was valid.
     const result = await pool.query(
       "SELECT id, email, full_name, phone_number_encrypted, created_at FROM users WHERE id = $1",
       [req.userId]
@@ -136,8 +108,6 @@ async function me(req, res, next) {
     const row = result.rows[0];
     const user = toPublicUser(row);
 
-    // Demonstrates the decrypt half of the encryption utility: if a phone number
-    // was stored, decrypt it back to plaintext just for the account owner.
     if (row.phone_number_encrypted) {
       user.phoneNumber = decrypt(row.phone_number_encrypted);
     }

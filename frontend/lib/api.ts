@@ -1,8 +1,3 @@
-// Thin wrapper around fetch() so the components don't repeat the base URL and
-// JSON boilerplate. NEXT_PUBLIC_API_URL is exposed to the browser (any env var
-// prefixed with NEXT_PUBLIC_ is bundled into client-side JS by Next.js — never
-// put a secret behind that prefix).
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export type AuthResponse = {
@@ -20,10 +15,8 @@ export type Category = {
 export type Transaction = {
   id: number;
   category_id: number | null;
-  amount: string; // Postgres NUMERIC comes back over JSON as a string, not a
-  // JS number — that's deliberate on Postgres's part, since converting a
-  // precise decimal to a JS float could quietly lose precision. Format it for
-  // display with Number(amount), but don't do math on it beyond that here.
+  // PostgreSQL NUMERIC values remain strings to preserve decimal precision.
+  amount: string;
   type: "income" | "expense";
   description: string | null;
   transaction_date: string;
@@ -45,7 +38,7 @@ export type Budget = {
   category_id: number;
   category_name: string;
   month: string;
-  amount: string; // NUMERIC, same string-not-number reasoning as Transaction.amount above
+  amount: string;
   spent: string;
 };
 
@@ -70,7 +63,7 @@ export type Anomaly = {
 };
 
 function getToken(): string | null {
-  if (typeof window === "undefined") return null; // guards against server-side rendering, where there's no browser/localStorage at all
+  if (typeof window === "undefined") return null;
   return localStorage.getItem("walletapp_token");
 }
 
@@ -81,16 +74,11 @@ async function request<T>(path: string, options: { method?: string; body?: unkno
     method: options.method || "GET",
     headers: {
       "Content-Type": "application/json",
-      // Every categories/transactions endpoint requires this — it's what
-      // requireAuth on the backend checks for. Signup/login are the only
-      // calls made before a token exists, which is why this file's original
-      // two functions didn't need it.
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  // 204 No Content (our delete endpoints) has no body to parse.
   if (res.status === 204) return undefined as T;
 
   const data = await res.json();

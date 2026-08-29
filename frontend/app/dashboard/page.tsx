@@ -23,7 +23,7 @@ import {
 import PlaidConnectButton from "./plaid-connect-button";
 
 function currentMonthValue() {
-  return new Date().toISOString().slice(0, 7); // "YYYY-MM", what <input type="month"> uses
+  return new Date().toISOString().slice(0, 7);
 }
 
 export default function DashboardPage() {
@@ -38,18 +38,15 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // New-category form state
   const [categoryName, setCategoryName] = useState("");
   const [categoryType, setCategoryType] = useState<"income" | "expense">("expense");
 
-  // New-transaction form state
   const [amount, setAmount] = useState("");
   const [txType, setTxType] = useState<"income" | "expense">("expense");
   const [description, setDescription] = useState("");
   const [transactionDate, setTransactionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [categoryId, setCategoryId] = useState<string>("");
 
-  // New-budget form state
   const [budgetCategoryId, setBudgetCategoryId] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
 
@@ -66,8 +63,6 @@ export default function DashboardPage() {
       setBudgets(budgetsRes.budgets);
       setPlaidItems(plaidItemsRes.items);
     } catch (err) {
-      // A 401 here means the token is missing/expired — bounce back to login
-      // rather than showing an empty dashboard forever.
       if (err instanceof Error && /invalid or expired token|missing or malformed/i.test(err.message)) {
         router.push("/login");
         return;
@@ -122,8 +117,6 @@ export default function DashboardPage() {
       });
       setAmount("");
       setDescription("");
-      // A new transaction can change a budget's spent-to-date, so budgets
-      // need reloading too, not just the transaction list.
       await loadData(budgetMonth);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add transaction");
@@ -196,9 +189,6 @@ export default function DashboardPage() {
   }
 
   const expenseCategories = categories.filter((c) => c.type === "expense");
-  // Categories that already have a budget this month shouldn't be offered
-  // again in the "add budget" form — the API would just reject it as a
-  // duplicate, so filtering it out here avoids a round-trip just to find that out.
   const budgetableCategories = expenseCategories.filter(
     (c) => !budgets.some((b) => b.category_id === c.id)
   );

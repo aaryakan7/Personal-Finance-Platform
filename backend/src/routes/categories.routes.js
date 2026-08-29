@@ -8,9 +8,6 @@ const { cacheResponse } = require("../middleware/cache");
 
 const router = express.Router();
 
-// Every route below requires a valid JWT. router.use runs requireAuth in front
-// of everything defined after it in this file, so there's no need to repeat it
-// on each individual route.
 router.use(requireAuth);
 
 router.get("/", cacheResponse(), list);

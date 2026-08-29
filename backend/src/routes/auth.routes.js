@@ -33,7 +33,6 @@ router.post(
   login
 );
 
-// Protected route: proves a JWT issued by /signup or /login actually works.
 router.get("/me", requireAuth, me);
 
 module.exports = router;
