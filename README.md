@@ -1,4 +1,4 @@
-# walletapp
+# Personal Finance Platform
 
 A full-stack personal finance application for tracking spending, managing budgets,
 linking sandbox bank accounts, and reviewing spending insights.
