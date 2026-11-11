@@ -24,6 +24,8 @@ async function run() {
   const client = await pool.connect();
 
   try {
+    // Session lock serializes migration checks across starting replicas.
+    await client.query("SELECT pg_advisory_lock(196795326, 1)");
     await ensureMigrationsTable(client);
     const applied = await getAppliedMigrations(client);
 
@@ -58,7 +60,8 @@ async function run() {
 
     console.log("All migrations applied.");
   } finally {
-    client.release();
+    // Close this session so the advisory lock is released on every exit path.
+    client.release(true);
     await pool.end();
   }
 }
