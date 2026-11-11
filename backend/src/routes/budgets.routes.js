@@ -4,11 +4,15 @@ const { body, param, query } = require("express-validator");
 const { list, create, update, remove } = require("../controllers/budgets.controller");
 const { handleValidation } = require("../middleware/validate");
 const { requireAuth } = require("../middleware/requireAuth");
-const { cacheResponse } = require("../middleware/cache");
 
 const router = express.Router();
 
 router.use(requireAuth);
+router.use((req, res, next) => {
+  // Budget totals must reflect committed transaction changes on every read.
+  res.set("Cache-Control", "no-store");
+  next();
+});
 
 const MONTH_FORMAT = /^\d{4}-\d{2}(-\d{2})?$/;
 
@@ -16,7 +20,6 @@ router.get(
   "/",
   [query("month").optional().matches(MONTH_FORMAT).withMessage("month must be in YYYY-MM format")],
   handleValidation,
-  cacheResponse(),
   list
 );
 
