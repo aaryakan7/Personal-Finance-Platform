@@ -1,3 +1,4 @@
+const { invalidateCommittedMutation } = require("../middleware/cache");
 const { getPlaidClient } = require("../config/plaid");
 const { pool } = require("../config/db");
 const { encrypt, decrypt } = require("../utils/crypto");
@@ -114,6 +115,11 @@ async function syncOneItem(item) {
   try {
     await client.query("BEGIN");
 
+    const locked = await client.query("SELECT cursor FROM plaid_items WHERE id = $1 FOR UPDATE", [item.id]);
+    if (!locked.rowCount || locked.rows[0].cursor !== item.cursor) {
+      throw Object.assign(new Error("Bank connection changed during sync. Retry sync to continue."), { status: 409 });
+    }
+
     for (const tx of [...added, ...modified]) {
       if (tx.pending) continue;
       const mapped = mapPlaidAmount(tx.amount);
@@ -168,16 +174,30 @@ async function sync(req, res, next) {
     );
 
     if (items.rows.length === 0) {
-      return res.json({ synced: 0, imported: 0 });
+      return res.json({ synced: 0, imported: 0, outcomes: [] });
     }
 
     let imported = 0;
+    const outcomes = [];
     for (const item of items.rows) {
-      const result = await syncOneItem(item);
-      imported += result.importedCount;
+      try {
+        const result = await syncOneItem(item);
+        imported += result.importedCount;
+        outcomes.push({ itemId: item.id, status: "synced", imported: result.importedCount });
+      } catch (err) {
+        console.error("Bank sync failed", { itemId: item.id, code: err.code || err.status });
+        outcomes.push({ itemId: item.id, status: "failed" });
+      }
     }
 
-    res.json({ synced: items.rows.length, imported });
+    const synced = outcomes.filter((outcome) => outcome.status === "synced").length;
+    if (synced > 0) await invalidateCommittedMutation(req);
+    res.status(synced === 0 ? 502 : 200).json({
+      synced,
+      imported,
+      outcomes,
+      ...(synced === 0 ? { error: "Bank sync failed. Try again." } : {}),
+    });
   } catch (err) {
     next(err);
   }
