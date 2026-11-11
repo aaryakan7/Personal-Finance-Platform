@@ -124,6 +124,13 @@ export function createTransaction(input: {
   return request<{ transaction: Transaction }>("/api/transactions", { method: "POST", body: input });
 }
 
+export function updateTransactionCategory(id: number, categoryId: number | null) {
+  return request<{ transaction: Transaction }>(`/api/transactions/${id}`, {
+    method: "PUT",
+    body: { categoryId },
+  });
+}
+
 export function deleteTransaction(id: number) {
   return request<void>(`/api/transactions/${id}`, { method: "DELETE" });
 }
@@ -156,7 +163,7 @@ export function exchangePlaidPublicToken(publicToken: string) {
 }
 
 export function syncPlaidTransactions() {
-  return request<{ synced: number; imported: number }>("/api/plaid/sync", { method: "POST" });
+  return request<{ synced: number; imported: number; outcomes: { itemId: number; status: "synced" | "failed" }[] }>("/api/plaid/sync", { method: "POST" });
 }
 
 export function getPlaidItems() {

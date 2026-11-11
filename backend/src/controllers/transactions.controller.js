@@ -1,10 +1,12 @@
+const { invalidateCommittedMutation } = require("../middleware/cache");
 const { pool } = require("../config/db");
 
-async function assertCategoryOwnership(categoryId, userId) {
+async function assertCategoryOwnership(categoryId, userId, type) {
   if (categoryId === undefined || categoryId === null) return true;
-  const result = await pool.query("SELECT id FROM categories WHERE id = $1 AND user_id = $2", [
+  const result = await pool.query("SELECT id FROM categories WHERE id = $1 AND user_id = $2 AND type = $3", [
     categoryId,
     userId,
+    type,
   ]);
   return result.rows.length > 0;
 }
@@ -43,8 +45,8 @@ async function create(req, res, next) {
   try {
     const { amount, type, description, transactionDate, categoryId } = req.body;
 
-    if (!(await assertCategoryOwnership(categoryId, req.userId))) {
-      return res.status(400).json({ error: "That category doesn't exist on your account" });
+    if (!(await assertCategoryOwnership(categoryId, req.userId, type))) {
+      return res.status(400).json({ error: "Choose a category on your account that matches the transaction type" });
     }
 
     const result = await pool.query(
@@ -54,6 +56,7 @@ async function create(req, res, next) {
       [req.userId, categoryId ?? null, amount, type, description ?? null, transactionDate]
     );
 
+    await invalidateCommittedMutation(req);
     res.status(201).json({ transaction: result.rows[0] });
   } catch (err) {
     next(err);
@@ -64,29 +67,32 @@ async function update(req, res, next) {
   try {
     const { amount, type, description, transactionDate, categoryId } = req.body;
 
-    // COALESCE treats an explicit null category as no change.
-
-    if (categoryId !== undefined && !(await assertCategoryOwnership(categoryId, req.userId))) {
-      return res.status(400).json({ error: "That category doesn't exist on your account" });
-    }
-
     const result = await pool.query(
       `UPDATE transactions
        SET amount = COALESCE($1, amount),
            type = COALESCE($2, type),
-           description = COALESCE($3, description),
+           description = CASE WHEN $8 THEN $3 ELSE description END,
            transaction_date = COALESCE($4, transaction_date),
-           category_id = COALESCE($5, category_id),
+           category_id = CASE WHEN $9 THEN $5 ELSE category_id END,
            updated_at = now()
        WHERE id = $6 AND user_id = $7
+         AND ((CASE WHEN $9 THEN $5 ELSE category_id END) IS NULL OR EXISTS (
+           SELECT 1 FROM categories c
+           WHERE c.id = CASE WHEN $9 THEN $5 ELSE transactions.category_id END
+             AND c.user_id = transactions.user_id
+             AND c.type = COALESCE($2, transactions.type)
+         ))
        RETURNING id, category_id, amount, type, description, transaction_date, created_at, source`,
-      [amount ?? null, type ?? null, description ?? null, transactionDate ?? null, categoryId ?? null, req.params.id, req.userId]
+      [amount ?? null, type ?? null, description ?? null, transactionDate ?? null, categoryId ?? null, req.params.id, req.userId, description !== undefined, categoryId !== undefined]
     );
 
     if (result.rows.length === 0) {
+      const existing = await pool.query("SELECT 1 FROM transactions WHERE id = $1 AND user_id = $2", [req.params.id, req.userId]);
+      if (existing.rowCount) return res.status(400).json({ error: "Choose a category on your account that matches the transaction type" });
       return res.status(404).json({ error: "Transaction not found" });
     }
 
+    await invalidateCommittedMutation(req);
     res.json({ transaction: result.rows[0] });
   } catch (err) {
     next(err);
@@ -104,6 +110,7 @@ async function remove(req, res, next) {
       return res.status(404).json({ error: "Transaction not found" });
     }
 
+    await invalidateCommittedMutation(req);
     res.status(204).send();
   } catch (err) {
     next(err);
