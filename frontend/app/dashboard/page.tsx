@@ -19,6 +19,7 @@ import {
   getPlaidItems,
   getTransactions,
   syncPlaidTransactions,
+  updateTransactionCategory,
 } from "@/lib/api";
 import PlaidConnectButton from "./plaid-connect-button";
 
@@ -34,6 +35,9 @@ export default function DashboardPage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [budgetMonth, setBudgetMonth] = useState(currentMonthValue);
   const [plaidItems, setPlaidItems] = useState<PlaidItem[]>([]);
+  const [reviewOnly, setReviewOnly] = useState(false);
+  const [savingCategory, setSavingCategory] = useState<number | null>(null);
+  const [budgetRevision, refreshBudgets] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,17 +54,16 @@ export default function DashboardPage() {
   const [budgetCategoryId, setBudgetCategoryId] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
 
-  async function loadData(month: string) {
+  async function loadData() {
     try {
-      const [categoriesRes, transactionsRes, budgetsRes, plaidItemsRes] = await Promise.all([
+      const [categoriesRes, transactionsRes, plaidItemsRes] = await Promise.all([
         getCategories(),
         getTransactions(),
-        getBudgets(month),
         getPlaidItems(),
       ]);
       setCategories(categoriesRes.categories);
       setTransactions(transactionsRes.transactions);
-      setBudgets(budgetsRes.budgets);
+      refreshBudgets((revision) => revision + 1);
       setPlaidItems(plaidItemsRes.items);
     } catch (err) {
       if (err instanceof Error && /invalid or expired token|missing or malformed/i.test(err.message)) {
@@ -78,9 +81,20 @@ export default function DashboardPage() {
       router.push("/login");
       return;
     }
-    loadData(budgetMonth);
+    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [budgetMonth]);
+  }, []);
+
+  useEffect(() => {
+    if (!budgetMonth || !localStorage.getItem("walletapp_token")) return;
+    let active = true;
+    getBudgets(budgetMonth).then(({ budgets }) => {
+      if (active) setBudgets(budgets);
+    }).catch((err: unknown) => {
+      if (active) setError(err instanceof Error ? err.message : "Failed to load budgets");
+    });
+    return () => { active = false; };
+  }, [budgetMonth, budgetRevision]);
 
   async function handleAddCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -88,7 +102,7 @@ export default function DashboardPage() {
     try {
       await createCategory({ name: categoryName, type: categoryType });
       setCategoryName("");
-      await loadData(budgetMonth);
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add category");
     }
@@ -98,7 +112,7 @@ export default function DashboardPage() {
     setError(null);
     try {
       await deleteCategory(id);
-      await loadData(budgetMonth);
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete category");
     }
@@ -117,7 +131,7 @@ export default function DashboardPage() {
       });
       setAmount("");
       setDescription("");
-      await loadData(budgetMonth);
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add transaction");
     }
@@ -127,7 +141,7 @@ export default function DashboardPage() {
     setError(null);
     try {
       await deleteTransaction(id);
-      await loadData(budgetMonth);
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete transaction");
     }
@@ -144,7 +158,7 @@ export default function DashboardPage() {
       });
       setBudgetCategoryId("");
       setBudgetAmount("");
-      await loadData(budgetMonth);
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add budget");
     }
@@ -154,7 +168,7 @@ export default function DashboardPage() {
     setError(null);
     try {
       await deleteBudget(id);
-      await loadData(budgetMonth);
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete budget");
     }
@@ -164,7 +178,7 @@ export default function DashboardPage() {
     setError(null);
     try {
       await deletePlaidItem(id);
-      await loadData(budgetMonth);
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to unlink account");
     }
@@ -174,8 +188,10 @@ export default function DashboardPage() {
     setError(null);
     setSyncing(true);
     try {
-      await syncPlaidTransactions();
-      await loadData(budgetMonth);
+      const { outcomes } = await syncPlaidTransactions();
+      await loadData();
+      const failed = outcomes.filter((outcome) => outcome.status === "failed").length;
+      if (failed > 0) setError(`Sync failed for ${failed} bank connection(s). Select Sync now to retry.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to sync transactions");
     } finally {
@@ -183,10 +199,22 @@ export default function DashboardPage() {
     }
   }
 
-  function categoryName_(id: number | null) {
-    if (id === null) return "Uncategorized";
-    return categories.find((c) => c.id === id)?.name || "Uncategorized";
+  async function handleTransactionCategory(id: number, value: string) {
+    setSavingCategory(id);
+    setError(null);
+    try {
+      const { transaction } = await updateTransactionCategory(id, value ? Number(value) : null);
+      setTransactions((rows) => rows.map((row) => row.id === id ? transaction : row));
+      refreshBudgets((revision) => revision + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save category");
+    } finally {
+      setSavingCategory(null);
+    }
   }
+
+  const needsReview = transactions.filter((t) => t.source === "plaid" && t.category_id === null);
+  const visibleTransactions = reviewOnly ? needsReview : transactions;
 
   const expenseCategories = categories.filter((c) => c.type === "expense");
   const budgetableCategories = expenseCategories.filter(
@@ -255,7 +283,10 @@ export default function DashboardPage() {
               onChange={(e) => setAmount(e.target.value)}
               required
             />
-            <select value={txType} onChange={(e) => setTxType(e.target.value as "income" | "expense")}>
+            <select value={txType} onChange={(e) => {
+              setTxType(e.target.value as "income" | "expense");
+              setCategoryId("");
+            }}>
               <option value="expense">Expense</option>
               <option value="income">Income</option>
             </select>
@@ -283,8 +314,12 @@ export default function DashboardPage() {
             <button type="submit">Add transaction</button>
           </form>
 
-          {transactions.length === 0 ? (
-            <p className="empty">No transactions yet — add your first one above.</p>
+          <label>
+            <input type="checkbox" checked={reviewOnly} onChange={(e) => setReviewOnly(e.target.checked)} />
+            Review uncategorized bank transactions ({needsReview.length})
+          </label>
+          {visibleTransactions.length === 0 ? (
+            <p className="empty">{reviewOnly ? "No bank transactions to review." : "No transactions yet."}</p>
           ) : (
             <table>
               <thead>
@@ -297,14 +332,26 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((t) => (
+                {visibleTransactions.map((t) => (
                   <tr key={t.id}>
                     <td>{t.transaction_date.slice(0, 10)}</td>
                     <td>
                       {t.description || "—"}{" "}
                       {t.source === "plaid" && <span className="badge bank">bank</span>}
                     </td>
-                    <td>{categoryName_(t.category_id)}</td>
+                    <td>
+                      <select
+                        aria-label={`Category for ${t.description || "transaction"} on ${t.transaction_date.slice(0, 10)}`}
+                        value={t.category_id ?? ""}
+                        disabled={savingCategory !== null}
+                        onChange={(e) => handleTransactionCategory(t.id, e.target.value)}
+                      >
+                        <option value="">Uncategorized</option>
+                        {categories.filter((c) => c.type === t.type || c.id === t.category_id).map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="amount" style={{ color: t.type === "income" ? "#1a7f37" : "#c0362c" }}>
                       {t.type === "income" ? "+" : "−"}${Number(t.amount).toFixed(2)}
                     </td>
@@ -327,7 +374,11 @@ export default function DashboardPage() {
           <input
             type="month"
             value={budgetMonth}
-            onChange={(e) => setBudgetMonth(e.target.value)}
+            onChange={(e) => {
+              setBudgets([]);
+              setBudgetCategoryId("");
+              setBudgetMonth(e.target.value);
+            }}
             aria-label="Budget month"
           />
         </div>
@@ -352,7 +403,7 @@ export default function DashboardPage() {
             onChange={(e) => setBudgetAmount(e.target.value)}
             required
           />
-          <button type="submit" disabled={budgetableCategories.length === 0}>
+          <button type="submit" disabled={!budgetMonth || budgetableCategories.length === 0}>
             Add budget
           </button>
         </form>
@@ -417,7 +468,7 @@ export default function DashboardPage() {
           <code>user_good</code> and password <code>pass_good</code> when Plaid asks.
         </p>
 
-        <PlaidConnectButton onConnected={() => loadData(budgetMonth)} />
+        <PlaidConnectButton onConnected={() => loadData()} />
 
         {plaidItems.length > 0 && (
           <ul className="row-list" style={{ marginTop: 16 }}>
