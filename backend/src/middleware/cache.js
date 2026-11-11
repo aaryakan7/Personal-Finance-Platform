@@ -41,11 +41,21 @@ function cacheResponse(ttlSeconds = DEFAULT_TTL_SECONDS, options = {}) {
   };
 }
 
+async function invalidateCommittedMutation(req) {
+  req.cacheInvalidated = true;
+  try {
+    const redis = await getRedisClient();
+    await redis?.incr(`walletapp:cache-version:${req.userId}`);
+  } catch (err) {
+    console.error("Redis cache invalidation failed", err.message);
+  }
+}
+
 function invalidateUserCacheOnMutation(req, res, next) {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
 
   res.on("finish", () => {
-    if (!req.userId || res.statusCode < 200 || res.statusCode >= 300) return;
+    if (req.cacheInvalidated || !req.userId || res.statusCode < 200 || res.statusCode >= 300) return;
     getRedisClient()
       .then((redis) => redis?.incr(`walletapp:cache-version:${req.userId}`))
       .catch((err) => console.error("Redis cache invalidation failed", err.message));
@@ -53,4 +63,4 @@ function invalidateUserCacheOnMutation(req, res, next) {
   next();
 }
 
-module.exports = { cacheResponse, invalidateUserCacheOnMutation, userCacheKey };
+module.exports = { cacheResponse, invalidateCommittedMutation, invalidateUserCacheOnMutation, userCacheKey };
